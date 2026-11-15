@@ -640,7 +640,7 @@ function getUpgradeRemainingWorkMinutes(item, targetMs = Date.now(), specificAcc
         workDone = (targetMs - startMs) / 60000;
     }
 
-    return Math.max(0, Math.round(baseMins - workDone));
+    return Math.max(0, baseMins - workDone);
 }
 
 /**
@@ -768,7 +768,7 @@ window.applyApprenticeBoost = function(id) {
 
     const now = Date.now();
     const currentWorkMins = getUpgradeRemainingWorkMinutes(item, now, acc);
-    const newWorkMins = Math.max(0, currentWorkMins - Math.round(hours * 60));
+    const newWorkMins = Math.max(0, currentWorkMins - (hours * 60));
 
     item.baseMinutes = newWorkMins;
     item.startMs = now;
