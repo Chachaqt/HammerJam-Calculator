@@ -655,8 +655,25 @@ function advanceUpgradesToNow(acc, now = Date.now()) {
     });
 }
 
-function formatMinsToDh(totalMins) {
-    if (totalMins <= 0) return "0m";
+function formatRemainingSeconds(totalSecs) {
+    if (totalSecs <= 0) return "0s";
+    const d = Math.floor(totalSecs / 86400);
+    const h = Math.floor((totalSecs % 86400) / 3600);
+    const m = Math.floor((totalSecs % 3600) / 60);
+    const s = Math.floor(totalSecs % 60);
+
+    if (d > 0) return `${d}d ${h}h ${m}m ${s}s`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+function formatMinsToDh(totalMins, includeSecs = false) {
+    if (totalMins <= 0) return includeSecs ? "0s" : "0m";
+    if (includeSecs) {
+        const totalSecs = Math.max(0, Math.round(totalMins * 60));
+        return formatRemainingSeconds(totalSecs);
+    }
     const d = Math.floor(totalMins / 1440);
     const h = Math.floor((totalMins % 1440) / 60);
     const m = Math.floor(totalMins % 60);
@@ -667,30 +684,37 @@ function formatMinsToDh(totalMins) {
 
 function parseDurationStringToMinutes(str) {
     if (!str) return 0;
-    let days = 0, hours = 0, mins = 0;
+    let days = 0, hours = 0, mins = 0, secs = 0;
     const dMatch = str.match(/(\d+)\s*d/i);
     const hMatch = str.match(/(\d+)\s*h/i);
     const mMatch = str.match(/(\d+)\s*m/i);
+    const sMatch = str.match(/(\d+)\s*s/i);
     if (dMatch) days = parseInt(dMatch[1], 10) || 0;
     if (hMatch) hours = parseInt(hMatch[1], 10) || 0;
     if (mMatch) mins = parseInt(mMatch[1], 10) || 0;
-    if (!dMatch && !hMatch && !mMatch) {
+    if (sMatch) secs = parseInt(sMatch[1], 10) || 0;
+    if (!dMatch && !hMatch && !mMatch && !sMatch) {
         if (str.includes(':')) {
             const parts = str.split(':').map(p => parseInt(p.trim(), 10) || 0);
             if (parts.length === 2) {
                 hours = parts[0];
                 mins = parts[1];
             } else if (parts.length === 3) {
+                hours = parts[0];
+                mins = parts[1];
+                secs = parts[2];
+            } else if (parts.length === 4) {
                 days = parts[0];
                 hours = parts[1];
                 mins = parts[2];
+                secs = parts[3];
             }
         } else {
             const num = parseInt(str, 10);
             if (!isNaN(num)) hours = num;
         }
     }
-    return (days * 24 + hours) * 60 + mins;
+    return (days * 24 + hours) * 60 + mins + (secs / 60);
 }
 
 window.editUpgradeTime = function(id) {
@@ -701,20 +725,18 @@ window.editUpgradeTime = function(id) {
 
     const now = Date.now();
     const currentWorkMins = getUpgradeRemainingWorkMinutes(item, now, acc);
-    const d = Math.floor(currentWorkMins / 1440);
-    const h = Math.floor((currentWorkMins % 1440) / 60);
-    const m = currentWorkMins % 60;
-    const defaultVal = d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m`;
+    const totalSecs = Math.max(0, Math.round(currentWorkMins * 60));
+    const defaultVal = formatRemainingSeconds(totalSecs);
 
     const input = prompt(
-        `Enter remaining in-game work for "${item.name}" (matching your Clash of Clans sidebar):\nExamples: "18h 59m", "1d 9h", "45m"`,
+        `Enter remaining in-game work for "${item.name}" (matching your Clash of Clans sidebar):\nExamples: "18h 59m 30s", "1d 9h 15m", "45m 10s"`,
         defaultVal
     );
     if (!input || !input.trim()) return;
 
     const parsedMins = parseDurationStringToMinutes(input.trim());
     if (parsedMins <= 0) {
-        alert("Invalid duration. Please enter format like '18h 59m' or '1d 9h'.");
+        alert("Invalid duration. Please enter format like '18h 59m 30s' or '1d 9h'.");
         return;
     }
 
@@ -1177,7 +1199,8 @@ function handleParseVillageJson() {
             if (rawTimer === null || rawTimer <= 0) return false;
 
             const remainingSeconds = Math.max(1, rawTimer - timestampDeltaSeconds);
-            const totalMinutes = Math.max(1, Math.round(remainingSeconds / 60));
+            // Preserve exact second precision from Supercell JSON as fractional minutes
+            const totalMinutes = Math.max(1 / 60, remainingSeconds / 60);
             const { name, category, type } = identifySupercellObject(obj, parentKey, categoryHint);
 
             extractedUpgrades.push({
@@ -2125,6 +2148,68 @@ function updatePotionCountdownTick() {
             }
         }
     }
+
+    // Live update all upgrade card countdowns every second
+    updateUpgradeLiveCardsTick();
+}
+
+function updateUpgradeLiveCardsTick() {
+    const acc = getActiveAccount();
+    if (!acc || !acc.upgrades || acc.upgrades.length === 0) return;
+    const now = Date.now();
+    const activeBoosts = acc.activeBoosts || {};
+
+    acc.upgrades.forEach(item => {
+        const itemCat = item.category || (item.type === 'lab' ? 'lab' : 'builder');
+        const isLab = (itemCat === 'lab' || item.type === 'lab') && itemCat !== 'pet';
+        const isPet = itemCat === 'pet';
+
+        const finishMs = getUpgradeFinishMs(item, now, acc);
+        const remTotalMs = Math.max(0, finishMs - now);
+        const remSecs = Math.floor(remTotalMs / 1000);
+        const remLabel = remTotalMs <= 0 ? "DONE! 🎉" : formatRemainingSeconds(remSecs);
+
+        const cardEl = document.querySelector(`.saved-item[data-id="${item.id}"]`);
+        if (cardEl) {
+            const remBadge = cardEl.querySelector('.saved-orig-badge');
+            if (remBadge) {
+                remBadge.innerHTML = `⏱️ ${remLabel} ✏️`;
+                if (remTotalMs <= 0) {
+                    remBadge.style.background = '#2ecc71';
+                    remBadge.style.color = '#12151c';
+                    remBadge.style.fontWeight = '900';
+                }
+            }
+
+            const inGameBadgeEl = cardEl.querySelector('.in-game-work-badge');
+            if (inGameBadgeEl) {
+                const inGameWorkMins = getUpgradeRemainingWorkMinutes(item, now, acc);
+                inGameBadgeEl.textContent = `🎮 In Game: ${formatMinsToDh(inGameWorkMins, true)}`;
+            }
+
+            const boostTagEl = cardEl.querySelector('.potion-active-tag.live-boost-tag');
+            if (boostTagEl) {
+                let boostSecs = 0;
+                let boostMult = 10;
+                if (itemCat === 'builder' && activeBoosts.builderPotionEndMs && activeBoosts.builderPotionEndMs > now) {
+                    boostSecs = Math.max(0, Math.floor((activeBoosts.builderPotionEndMs - now) / 1000));
+                    boostMult = 10;
+                } else if (isLab && activeBoosts.labPotionEndMs && activeBoosts.labPotionEndMs > now) {
+                    boostSecs = Math.max(0, Math.floor((activeBoosts.labPotionEndMs - now) / 1000));
+                    boostMult = 24;
+                } else if (isPet && activeBoosts.petPotionEndMs && activeBoosts.petPotionEndMs > now) {
+                    boostSecs = Math.max(0, Math.floor((activeBoosts.petPotionEndMs - now) / 1000));
+                    boostMult = 24;
+                }
+                if (boostSecs > 0) {
+                    const bM = Math.floor(boostSecs / 60);
+                    const bS = boostSecs % 60;
+                    const bSPad = bS < 10 ? '0' + bS : bS;
+                    boostTagEl.textContent = `⚡ ${boostMult}x Boost (${bM}m ${bSPad}s left)`;
+                }
+            }
+        }
+    });
 }
 
 // Filter Saved Upgrades List
@@ -2233,13 +2318,7 @@ function renderSavedList(rebuild = true) {
         // Calculate remaining from right now
         const remTotalMs = Math.max(0, finishMs - now);
         const remSecs = Math.floor(remTotalMs / 1000);
-        const remD = Math.floor(remSecs / 86400);
-        const remH = Math.floor((remSecs % 86400) / 3600);
-        const remM = Math.floor((remSecs % 3600) / 60);
-
-        let remLabel = `${remH}h ${remM}m`;
-        if (remD > 0) remLabel = `${remD}d ${remH}h ${remM}m`;
-        if (remTotalMs <= 0) remLabel = "DONE! 🎉";
+        let remLabel = remTotalMs <= 0 ? "DONE! 🎉" : formatRemainingSeconds(remSecs);
 
         const acc = getActiveAccount();
         const activeBoosts = acc ? (acc.activeBoosts || {}) : {};
@@ -2250,7 +2329,7 @@ function renderSavedList(rebuild = true) {
                           potions > 0;
         let inGameBadge = '';
         if (isBoosted && remTotalMs > 0) {
-            inGameBadge = `<span class="in-game-work-badge" onclick="editUpgradeTime('${item.id}')" title="Work remaining shown in Clash of Clans sidebar. Click to edit.">🎮 In Game: ${formatMinsToDh(inGameWorkMins)}</span>`;
+            inGameBadge = `<span class="in-game-work-badge" onclick="editUpgradeTime('${item.id}')" title="Work remaining shown in Clash of Clans sidebar. Click to edit.">🎮 In Game: ${formatMinsToDh(inGameWorkMins, true)}</span>`;
         }
 
         // Badges and potion labels based on category
@@ -2284,19 +2363,26 @@ function renderSavedList(rebuild = true) {
         if (itemCat === 'builder' && activeBoosts.builderPotionEndMs && activeBoosts.builderPotionEndMs > now) {
             const bRemSecs = Math.max(0, Math.floor((activeBoosts.builderPotionEndMs - now) / 1000));
             const bRemM = Math.floor(bRemSecs / 60);
-            activeVillageBoostTag = `<span class="potion-active-tag" style="background: rgba(168, 85, 247, 0.2); border-color: #a855f7; color: #d8b4fe;">⚡ 10x Boost (${bRemM}m left)</span>`;
+            const bRemS = bRemSecs % 60;
+            const bPad = bRemS < 10 ? '0' + bRemS : bRemS;
+            activeVillageBoostTag = `<span class="potion-active-tag live-boost-tag" style="background: rgba(168, 85, 247, 0.2); border-color: #a855f7; color: #d8b4fe;">⚡ 10x Boost (${bRemM}m ${bPad}s left)</span>`;
         } else if (isLab && activeBoosts.labPotionEndMs && activeBoosts.labPotionEndMs > now) {
             const lRemSecs = Math.max(0, Math.floor((activeBoosts.labPotionEndMs - now) / 1000));
             const lRemM = Math.floor(lRemSecs / 60);
-            activeVillageBoostTag = `<span class="potion-active-tag potion-lab">⚡ 24x Boost (${lRemM}m left)</span>`;
+            const lRemS = lRemSecs % 60;
+            const lPad = lRemS < 10 ? '0' + lRemS : lRemS;
+            activeVillageBoostTag = `<span class="potion-active-tag potion-lab live-boost-tag">⚡ 24x Boost (${lRemM}m ${lPad}s left)</span>`;
         } else if (isPet && activeBoosts.petPotionEndMs && activeBoosts.petPotionEndMs > now) {
             const pRemSecs = Math.max(0, Math.floor((activeBoosts.petPotionEndMs - now) / 1000));
             const pRemM = Math.floor(pRemSecs / 60);
-            activeVillageBoostTag = `<span class="potion-active-tag potion-pet">🐾 24x Pet Boost (${pRemM}m left)</span>`;
+            const pRemS = pRemSecs % 60;
+            const pPad = pRemS < 10 ? '0' + pRemS : pRemS;
+            activeVillageBoostTag = `<span class="potion-active-tag potion-pet live-boost-tag">🐾 24x Pet Boost (${pRemM}m ${pPad}s left)</span>`;
         }
 
         const div = document.createElement('div');
         div.className = 'saved-item';
+        div.dataset.id = item.id;
         div.innerHTML = `
             <div class="saved-left">
                 <div class="saved-title-row">
