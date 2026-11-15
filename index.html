@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clash of Clans - Upgrade Finish Time & Potion Calculator</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-area">
+                <span class="hammer-icon">🔨</span>
+                <div>
+                    <h1>UPGRADE & RESEARCH CALCULATOR</h1>
+                    <p class="subtitle">Clash of Clans • Builder Potion (10x) & Laboratory Research Potion (24x)</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button type="button" id="alarmToggleBtn" class="btn btn-alarm" onclick="toggleAlarm()">🔔 Alarm: ON</button>
+                <button type="button" id="testAlarmBtn" class="btn btn-secondary btn-sm" onclick="testAlarm()" title="Click to test the finish alarm sound">🎵 Test</button>
+                <button type="button" id="openImportJsonBtn" onclick="openJsonModal()" class="btn btn-coc-green">📥 Import Village JSON</button>
+            </div>
+        </header>
+
+        <!-- Main Content Dashboard -->
+        <main class="dashboard-layout">
+            <!-- Saved Upgrades List & Multi-Account Manager -->
+            <section class="card saved-list-card">
+                <div class="card-header">
+                    <h2>📋 Ongoing Upgrades (<span id="savedCount">0</span>)</h2>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" id="openManualTimerBtn" onclick="openManualTimerModal()" class="btn btn-secondary btn-sm" title="Add a single custom upgrade timer">➕ Add Timer</button>
+                        <button type="button" id="clearSavedBtn" class="btn btn-danger btn-sm">Clear All</button>
+                    </div>
+                </div>
+
+                <!-- Multi-Account Switcher -->
+                <div class="accounts-nav-container">
+                    <div class="accounts-header-row">
+                        <span class="accounts-title">👥 VILLAGE ACCOUNTS (<span id="accountsCount">1</span>)</span>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" class="btn btn-sm btn-coc-green" onclick="createNewAccountPrompt()" title="Add another account">➕ Add Account</button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="renameCurrentAccount()" title="Rename active account">✏️ Rename</button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="deleteCurrentAccount()" title="Delete active account" id="deleteAccountBtn">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="accounts-tabs-row" id="accountsTabsRow">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Village Profile Banner (Displays uploaded Player/Village Name & TH) -->
+                <div id="villageProfileBar" class="village-profile-bar hidden">
+                    <div class="village-profile-left">
+                        <span class="village-hall-badge" id="villageThBadge">TH 16</span>
+                        <div class="village-text-col">
+                            <span class="village-player-name" id="villagePlayerName" onclick="editVillageName()" title="Click to rename village">
+                                Chief Player ✏️
+                            </span>
+                            <span class="village-player-tag" id="villagePlayerTag">#TAG • Home Village</span>
+                        </div>
+                    </div>
+                    <div class="village-builders-status" id="villageBuildersStatus">
+                        🔨 6/7 Builders Busy
+                        <small id="villageLabStatus">⚗️ Lab Active</small>
+                    </div>
+                </div>
+
+                <!-- Filter Bar for Saved Items -->
+                <div class="saved-filter-bar">
+                    <button type="button" class="filter-btn active" data-filter="all" onclick="setSavedFilter('all')">All (<span id="filterAllCount">0</span>)</button>
+                    <button type="button" class="filter-btn" data-filter="builder" onclick="setSavedFilter('builder')">🔨 Builders (<span id="filterBuilderCount">0</span>)</button>
+                    <button type="button" class="filter-btn" data-filter="lab" onclick="setSavedFilter('lab')">⚗️ Lab (<span id="filterLabCount">0</span>)</button>
+                    <button type="button" class="filter-btn" data-filter="pet" onclick="setSavedFilter('pet')">🐾 Pets (<span id="filterPetCount">0</span>)</button>
+                    <button type="button" class="filter-btn" data-filter="builder_base" onclick="setSavedFilter('builder_base')">🛠️ Builder Base (<span id="filterBBCount">0</span>)</button>
+                </div>
+                
+                <!-- Active Potion Boosts Live Widget (Matches in-game potion countdown) -->
+                <div class="active-potion-widget">
+                    <!-- Builder Potion Box -->
+                    <div class="potion-boost-box" id="builderBoostBox">
+                        <div class="boost-header-line">
+                            <span class="boost-icon">🧪</span>
+                            <span class="boost-label">Builder Potion (10x Speed)</span>
+                            <span class="boost-status-pill" id="builderBoostPill">0m (Inactive)</span>
+                        </div>
+                        <div class="boost-timer-line" id="builderBoostTimerLine">
+                            Inactive • Upgrades running at normal 1x
+                        </div>
+                        <div class="boost-btns-row">
+                            <button type="button" class="btn btn-potion btn-xs" onclick="quickAddPotionBoost('builder', 60)" title="Add 1 full Builder Potion (1 hour)">+1 Potion (1h)</button>
+                            <button type="button" class="btn btn-secondary btn-xs" onclick="openEditPotionTimeModal('builder')" title="Set exact time left on potion (e.g. 40m 4s)">✏️ Set Time Left</button>
+                            <button type="button" class="btn btn-danger-soft btn-xs" id="stopBuilderBoostBtn" onclick="stopPotionBoost('builder')" style="display:none;" title="Cancel boost">✕ Stop</button>
+                        </div>
+                    </div>
+
+                    <!-- Lab Potion Box -->
+                    <div class="potion-boost-box" id="labBoostBox">
+                        <div class="boost-header-line">
+                            <span class="boost-icon">⚗️</span>
+                            <span class="boost-label">Research Potion (24x Speed)</span>
+                            <span class="boost-status-pill" id="labBoostPill">0m (Inactive)</span>
+                        </div>
+                        <div class="boost-timer-line" id="labBoostTimerLine">
+                            Inactive • Lab running at normal 1x
+                        </div>
+                        <div class="boost-btns-row">
+                            <button type="button" class="btn btn-potion-lab btn-xs" onclick="quickAddPotionBoost('lab', 60)" title="Add 1 full Research Potion (1 hour)">+1 Potion (1h)</button>
+                            <button type="button" class="btn btn-secondary btn-xs" onclick="openEditPotionTimeModal('lab')" title="Set exact time left on potion">✏️ Set Time Left</button>
+                            <button type="button" class="btn btn-danger-soft btn-xs" id="stopLabBoostBtn" onclick="stopPotionBoost('lab')" style="display:none;" title="Cancel boost">✕ Stop</button>
+                        </div>
+                    </div>
+
+                    <!-- Pet Potion Box -->
+                    <div class="potion-boost-box" id="petBoostBox">
+                        <div class="boost-header-line">
+                            <span class="boost-icon">🐾</span>
+                            <span class="boost-label">Pet Potion (24x Speed)</span>
+                            <span class="boost-status-pill" id="petBoostPill">0m (Inactive)</span>
+                        </div>
+                        <div class="boost-timer-line" id="petBoostTimerLine">
+                            Inactive • Pets running at normal 1x
+                        </div>
+                        <div class="boost-btns-row">
+                            <button type="button" class="btn btn-potion-pet btn-xs" onclick="quickAddPotionBoost('pet', 60)" title="Add 1 full Pet Potion (1 hour)">+1 Potion (1h)</button>
+                            <button type="button" class="btn btn-secondary btn-xs" onclick="openEditPotionTimeModal('pet')" title="Set exact time left on potion">✏️ Set Time Left</button>
+                            <button type="button" class="btn btn-danger-soft btn-xs" id="stopPetBoostBtn" onclick="stopPotionBoost('pet')" style="display:none;" title="Cancel boost">✕ Stop</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-preset-banner">
+                    <span style="font-size: 0.8rem; color: #94a3b8;">Quick Actions:</span>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                        <button type="button" onclick="resetAllPotions()" class="btn btn-secondary btn-sm" title="Clear all active potion boosts and reset all upgrades to 1x normal speed">↺ Reset All Boosts</button>
+                        <button type="button" id="quickImportBtn" onclick="openJsonModal()" class="btn btn-coc-green btn-sm">📋 CoC JSON</button>
+                    </div>
+                </div>
+
+                <div id="savedListContainer" class="saved-list">
+                    <!-- Dynamic items -->
+                </div>
+            </section>
+
+            <!-- Explanation Box -->
+            <section class="card info-card">
+                <h3>💡 How the potion math works:</h3>
+                <div class="potion-math-grid">
+                    <div class="potion-math-box builder-math">
+                        <div class="potion-math-title">🔨 Builder Potion (10x Speed)</div>
+                        <p>Runs for <strong>1 real hour</strong> at <strong>10x speed</strong>.</p>
+                        <p>Completes <strong>10 hours</strong> of builder progress in 1 hr &rarr; <strong>Saves 9 hours</strong> per potion.</p>
+                    </div>
+                    <div class="potion-math-box lab-math">
+                        <div class="potion-math-title">⚗️ Research Potion (24x Speed)</div>
+                        <p>Runs for <strong>1 real hour</strong> at <strong>24x speed</strong>.</p>
+                        <p>Completes <strong>24 hours (1 full day)</strong> of laboratory research in 1 hr &rarr; <strong>Saves 23 hours!</strong> (Laboratory only)</p>
+                    </div>
+                    <div class="potion-math-box pet-math">
+                        <div class="potion-math-title">🐾 Pet Potion (24x Speed)</div>
+                        <p>Runs for <strong>1 real hour</strong> at <strong>24x speed</strong>.</p>
+                        <p>Completes <strong>24 hours</strong> of Hero Pet upgrades in 1 hr &rarr; <strong>Saves 23 hours!</strong> (Pet House only)</p>
+                    </div>
+                </div>
+                <ul class="info-list">
+                    <li><strong>Builder Example:</strong> 10h upgrade + 1 Builder Potion finishes in <strong>1 real hour</strong> (9h saved)!</li>
+                    <li><strong>Lab Example:</strong> 3-day (72h) research + 2 Research Potions &rarr; 48h done in 2h + 24h normal = finishes in <strong>26 real hours</strong> (saves 46 hours)!</li>
+                </ul>
+            </section>
+        </main>
+
+        <!-- JSON Import Modal -->
+        <div id="jsonModalOverlay" class="modal-overlay hidden">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>📥 Import Village Data (JSON)</h3>
+                    <button type="button" id="closeJsonModalBtn" onclick="closeJsonModal()" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-help-text">
+                        1. In Clash of Clans, go to <strong>Settings</strong> &rarr; <strong>More Settings</strong>.<br>
+                        2. Under <strong>Data Export</strong>, tap the green <strong>COPY</strong> button next to <em>"Export Village data in JSON format"</em>.<br>
+                        3. Paste the copied text below:
+                    </p>
+
+                    <!-- Target Account & Player Name Fields -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 170px;">
+                            <label for="jsonTargetAccountSelect" style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">
+                                🎯 Destination Account:
+                            </label>
+                            <select id="jsonTargetAccountSelect" class="input-select-sm" style="width: 100%; padding: 8px; background: #0f131a; color: #fff; border: 1px solid var(--card-border); border-radius: 6px;">
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 170px;">
+                            <label for="jsonAccountNameInput" style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">
+                                👤 Player / Account Name:
+                            </label>
+                            <input type="text" id="jsonAccountNameInput" class="input-number" style="width: 100%; text-align: left; padding: 8px 10px; font-size: 0.88rem;" placeholder="e.g. Roll, Main TH14">
+                        </div>
+                    </div>
+
+                    <p style="font-size: 0.78rem; color: #f6b828; background: rgba(246, 184, 40, 0.1); border: 1px solid rgba(246, 184, 40, 0.3); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; line-height: 1.4;">
+                        💡 <strong>Why isn't my name automatically in the JSON?</strong> Supercell's game export only includes your Player Tag (e.g. <code>#LG280UYU8</code>) and timers—it does not export your username string. Enter your name above or use <strong>✏️ Rename</strong> anytime!
+                    </p>
+
+                    <textarea id="jsonInputTextarea" class="json-textarea" placeholder="Paste your exported Clash of Clans Village JSON here (Ctrl + V)..."></textarea>
+                    
+                    <div class="modal-actions-row">
+                        <button type="button" id="parseJsonBtn" onclick="handleParseVillageJson()" class="btn btn-coc-green btn-block">⚡ Load Ongoing Upgrades</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manual Custom Timer Modal (Optional) -->
+        <div id="manualTimerModalOverlay" class="modal-overlay hidden">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>➕ Add Custom Upgrade Timer</h3>
+                    <button type="button" onclick="closeManualTimerModal()" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+                        <div style="flex: 2; min-width: 180px;">
+                            <label for="manualNameInput" style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">
+                                Upgrade Name:
+                            </label>
+                            <input type="text" id="manualNameInput" class="input-number" style="width: 100%; text-align: left; padding: 8px 10px; font-size: 0.9rem;" placeholder="e.g. Hidden Tesla, Archer Queen">
+                        </div>
+                        <div style="flex: 1; min-width: 140px;">
+                            <label for="manualCategorySelect" style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">
+                                Category:
+                            </label>
+                            <select id="manualCategorySelect" class="input-select-sm" style="width: 100%; padding: 8px; background: #0f131a; color: #fff; border: 1px solid var(--card-border); border-radius: 6px;">
+                                <option value="builder">🔨 Home Builder</option>
+                                <option value="lab">⚗️ Laboratory</option>
+                                <option value="pet">🐾 Pet House</option>
+                                <option value="builder_base">🛠️ Builder Base</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">
+                        Remaining Duration:
+                    </label>
+                    <div class="duration-inputs-grid" style="margin-bottom: 16px;">
+                        <div class="dur-col">
+                            <label for="manualDays">Days</label>
+                            <input type="number" id="manualDays" class="input-number" min="0" value="0">
+                        </div>
+                        <div class="dur-col">
+                            <label for="manualHours">Hours</label>
+                            <input type="number" id="manualHours" class="input-number" min="0" max="23" value="10">
+                        </div>
+                        <div class="dur-col">
+                            <label for="manualMins">Minutes</label>
+                            <input type="number" id="manualMins" class="input-number" min="0" max="59" value="0">
+                        </div>
+                    </div>
+
+                    <div class="modal-actions-row">
+                        <button type="button" onclick="saveManualModalTimer()" class="btn btn-primary btn-block">📌 Add to Ongoing Upgrades</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Potion Time Editor Modal (Set exact remaining potion time from in-game) -->
+    <div class="modal-overlay hidden" id="potionEditModalOverlay" style="display: none;">
+        <div class="modal" style="max-width: 460px;">
+            <div class="modal-header">
+                <h3 id="potionModalTitle">🧪 Set Builder Potion Remaining Time</h3>
+                <button type="button" class="close-btn" onclick="closePotionEditModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.88rem; color: #94a3b8; margin-bottom: 14px; line-height: 1.45;">
+                    Enter the remaining boost time shown in your Clash of Clans village (e.g. from your village: <strong>40m 4s</strong>).
+                </p>
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: #e2e8f0; margin-bottom: 6px; display: block;">Time Left in Game:</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="potionTimeInput" class="input-text" placeholder="e.g. 40m 4s or 40" style="font-size: 1.05rem; font-weight: 700; flex: 1;">
+                        <button type="button" class="btn btn-coc-green" onclick="saveEditedPotionTime()" style="white-space: nowrap;">Apply Boost</button>
+                    </div>
+                </div>
+                <div style="font-size: 0.78rem; color: #64748b; font-weight: 700; margin-bottom: 6px;">QUICK PRESETS:</div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm btn-potion" onclick="setPresetPotionTime('40m 4s')">⚡ 40m 4s (From Game)</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetPotionTime('10m')">10m</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetPotionTime('20m')">20m</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetPotionTime('1h')">1h (Full Potion)</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="setPresetPotionTime('2h')">2h (2x Potions)</button>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="setPresetPotionTime('0')">✕ Stop Boost</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
